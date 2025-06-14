@@ -27,9 +27,9 @@ const TemperatureLogger: React.FC = () => {
 
   // Get the correct server URL for both development and production
   const getServerUrl = () => {
-    // Always use the same host as the frontend for Railway deployment
+    // For Railway deployment, use explicit WebSocket path
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}`;
+    return `${protocol}//${window.location.host}/ws`;
   };
 
   const getApiUrl = () => {
@@ -49,33 +49,37 @@ const TemperatureLogger: React.FC = () => {
     };
     
     websocket.onmessage = (event) => {
-      const message: WebSocketMessage = JSON.parse(event.data);
-      
-      if (message.type === 'initial') {
-        const data = message.data as { current: number; history: TemperatureReading[] };
-        setCurrentTemp(data.current);
-        setTemperatureHistory(data.history);
-      } else if (message.type === 'temperature') {
-        const reading = message.data as TemperatureReading;
-        setCurrentTemp(reading.temperature);
+      try {
+        const message: WebSocketMessage = JSON.parse(event.data);
         
-        setTemperatureHistory(prev => {
-          const updated = [...prev, reading];
-          return updated.slice(-50); // Keep last 50 readings
-        });
-        
-        // Check for high temperature alert
-        if (reading.temperature > 35) {
-          setAlerts(prev => {
-            const newAlerts = [reading, ...prev.slice(0, 4)]; // Keep last 5 alerts
-            return newAlerts;
+        if (message.type === 'initial') {
+          const data = message.data as { current: number; history: TemperatureReading[] };
+          setCurrentTemp(data.current);
+          setTemperatureHistory(data.history);
+        } else if (message.type === 'temperature') {
+          const reading = message.data as TemperatureReading;
+          setCurrentTemp(reading.temperature);
+          
+          setTemperatureHistory(prev => {
+            const updated = [...prev, reading];
+            return updated.slice(-50); // Keep last 50 readings
           });
+          
+          // Check for high temperature alert
+          if (reading.temperature > 35) {
+            setAlerts(prev => {
+              const newAlerts = [reading, ...prev.slice(0, 4)]; // Keep last 5 alerts
+              return newAlerts;
+            });
+          }
         }
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
       }
     };
     
-    websocket.onclose = () => {
-      console.log('Disconnected from temperature server');
+    websocket.onclose = (event) => {
+      console.log('Disconnected from temperature server', event.code, event.reason);
       setIsConnected(false);
       // Attempt to reconnect after 3 seconds
       setTimeout(connectWebSocket, 3000);
