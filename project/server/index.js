@@ -18,7 +18,9 @@ app.use(express.json());
 
 // Serve static files from the dist directory in production
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../dist')));
+  const distPath = path.join(__dirname, '../dist');
+  console.log('Serving static files from:', distPath);
+  app.use(express.static(distPath));
 }
 
 // Temperature data storage
@@ -123,7 +125,9 @@ app.get('/api/health', (req, res) => {
 // Serve the React app for all other routes in production
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
+    const indexPath = path.join(__dirname, '../dist/index.html');
+    console.log('Serving index.html from:', indexPath);
+    res.sendFile(indexPath);
   });
 }
 
@@ -139,6 +143,12 @@ server.listen(PORT, () => {
   console.log(`📊 WebSocket server ready for real-time connections`);
   console.log(`📈 Temperature simulation started (every 5 seconds)`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Log the dist directory path for debugging
+  if (process.env.NODE_ENV === 'production') {
+    const distPath = path.join(__dirname, '../dist');
+    console.log(`📁 Static files directory: ${distPath}`);
+  }
 });
 
 // Graceful shutdown
