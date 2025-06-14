@@ -10,17 +10,23 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+
+// Railway-specific WebSocket configuration
+const wss = new WebSocketServer({ 
+  server,
+  path: '/ws' // Explicit WebSocket path for Railway
+});
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 app.use(express.json());
 
 // Serve static files from the dist directory in production
 if (process.env.NODE_ENV === 'production') {
-  const distPath = path.join(__dirname, '../dist');
-  console.log('Serving static files from:', distPath);
-  app.use(express.static(distPath));
+  app.use(express.static(path.join(__dirname, '../dist')));
 }
 
 // Temperature data storage
@@ -58,10 +64,14 @@ function broadcastTemperature() {
   
   wss.clients.forEach(client => {
     if (client.readyState === 1) { // WebSocket.OPEN
-      client.send(JSON.stringify({
-        type: 'temperature',
-        data: reading
-      }));
+      try {
+        client.send(JSON.stringify({
+          type: 'temperature',
+          data: reading
+        }));
+      } catch (error) {
+        console.error('Error sending to client:', error);
+      }
     }
   });
   
@@ -69,24 +79,43 @@ function broadcastTemperature() {
 }
 
 // WebSocket connection handling
-wss.on('connection', (ws) => {
-  console.log('Client connected');
+wss.on('connection', (ws, req) => {
+  console.log('Client connected from:', req.socket.remoteAddress);
   
   // Send current temperature and recent history to new client
-  ws.send(JSON.stringify({
-    type: 'initial',
-    data: {
-      current: currentTemperature,
-      history: temperatureLog.slice(-20) // Last 20 readings
-    }
-  }));
+  try {
+    ws.send(JSON.stringify({
+      type: 'initial',
+      data: {
+        current: currentTemperature,
+        history: temperatureLog.slice(-20) // Last 20 readings
+      }
+    }));
+  } catch (error) {
+    console.error('Error sending initial data:', error);
+  }
   
   ws.on('close', () => {
     console.log('Client disconnected');
   });
+  
+  ws.on('error', (error) => {
+    console.error('WebSocket error:', error);
+  });
 });
 
 // REST API Endpoints
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    uptime: process.uptime(),
+    readings: temperatureLog.length,
+    websocketClients: wss.clients.size,
+    environment: process.env.NODE_ENV || 'development',
+    port: process.env.PORT || 3001
+  });
+});
+
 app.get('/api/temperature', (req, res) => {
   res.json({
     current: currentTemperature,
@@ -113,21 +142,10 @@ app.get('/api/temperature/export', (req, res) => {
   res.send(csv);
 });
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    uptime: process.uptime(),
-    readings: temperatureLog.length 
-  });
-});
-
 // Serve the React app for all other routes in production
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req, res) => {
-    const indexPath = path.join(__dirname, '../dist/index.html');
-    console.log('Serving index.html from:', indexPath);
-    res.sendFile(indexPath);
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
   });
 }
 
@@ -138,21 +156,27 @@ const temperatureInterval = setInterval(broadcastTemperature, 5000);
 generateTemperature();
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`🌡️  Smart Temperature Logger Server running on port ${PORT}`);
-  console.log(`📊 WebSocket server ready for real-time connections`);
+  console.log(`📊 WebSocket server ready at /ws`);
   console.log(`📈 Temperature simulation started (every 5 seconds)`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  
-  // Log the dist directory path for debugging
-  if (process.env.NODE_ENV === 'production') {
-    const distPath = path.join(__dirname, '../dist');
-    console.log(`📁 Static files directory: ${distPath}`);
-  }
+  console.log(`WebSocket clients: ${wss.clients.size}`);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
+  console.log('Received SIGTERM, shutting down gracefully');
   clearInterval(temperatureInterval);
-  server.close();
+  server.close(() => {
+    console.log('Server closed');
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('Received SIGINT, shutting down gracefully');
+  clearInterval(temperatureInterval);
+  server.close(() => {
+    console.log('Server closed');
+  });
 });
