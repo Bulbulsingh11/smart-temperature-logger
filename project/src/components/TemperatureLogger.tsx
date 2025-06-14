@@ -27,28 +27,14 @@ const TemperatureLogger: React.FC = () => {
 
   // Get the correct server URL for both development and production
   const getServerUrl = () => {
-    if (process.env.NODE_ENV === 'production' || window.location.hostname !== 'localhost') {
-      // In production, use the same host as the frontend
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${protocol}//${window.location.host}`;
-    } else {
-      // In development, connect to the separate backend server
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const hostname = window.location.hostname;
-      return `${protocol}//${hostname}:3001`;
-    }
+    // Always use the same host as the frontend for Railway deployment
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}`;
   };
 
   const getApiUrl = () => {
-    if (process.env.NODE_ENV === 'production' || window.location.hostname !== 'localhost') {
-      // In production, use the same host as the frontend
-      return `${window.location.protocol}//${window.location.host}`;
-    } else {
-      // In development, connect to the separate backend server
-      const protocol = window.location.protocol;
-      const hostname = window.location.hostname;
-      return `${protocol}//${hostname}:3001`;
-    }
+    // Always use the same host as the frontend for Railway deployment
+    return `${window.location.protocol}//${window.location.host}`;
   };
 
   // WebSocket connection
